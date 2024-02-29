@@ -199,6 +199,11 @@ char *fpm_php_auth_user(void)
 	return SG(request_info).auth_user;
 }
 
+char *fpm_php_argv0(void)
+{
+	return SG(request_info).argv0;
+}
+
 size_t fpm_php_content_length(void)
 {
 	return SG(request_info).content_length;
