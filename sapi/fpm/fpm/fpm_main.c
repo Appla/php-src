@@ -989,6 +989,7 @@ static void init_request_info(void)
 	SG(request_info).content_type = NULL;
 	SG(request_info).content_length = 0;
 	SG(sapi_headers).http_response_code = 200;
+	SG(request_info).argv0 = NULL;
 
 	/* if script_path_translated is not set, then there is no point to carry on
 	 * as the response is 404 and there is no further processing. */
@@ -1345,6 +1346,9 @@ static void init_request_info(void)
 		SG(request_info).query_string = FCGI_GETENV(request, "QUERY_STRING");
 		SG(request_info).content_type = (content_type ? content_type : "" );
 		SG(request_info).content_length = (content_length ? atol(content_length) : 0);
+		// store the request-id in the request_info, this is a pointer to request->env
+		//     which will freed by itself via fcgi_close -> fcgi_hash_clean
+		SG(request_info).argv0 = FCGI_GETENV(request, "HTTP_X_REQUEST_ID");
 
 		/* The CGI RFC allows servers to pass on unvalidated Authorization data */
 		auth = FCGI_GETENV(request, "HTTP_AUTHORIZATION");

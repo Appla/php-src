@@ -109,6 +109,7 @@ void fpm_request_info(void)
 	char *script_filename = fpm_php_script_filename();
 	char *query_string = fpm_php_query_string();
 	char *auth_user = fpm_php_auth_user();
+	char *req_id = fpm_php_argv0();
 	size_t content_length = fpm_php_content_length();
 	struct timeval now;
 
@@ -132,7 +133,18 @@ void fpm_request_info(void)
 	}
 
 	if (query_string) {
-		strlcpy(proc->query_string, query_string, sizeof(proc->query_string));
+		// we append reqId to query_string, so we need to make sure we have enough space
+		if (req_id) {
+			size_t rid_off = strlcpy(proc->query_string, query_string, sizeof(proc->query_string)-37);
+			rid_off = rid_off < sizeof(proc->query_string)-37 ? rid_off : sizeof(proc->query_string)-37-1;
+			proc->query_string[rid_off++] = '#';
+			strlcpy(proc->query_string+rid_off, req_id, 36);
+		} else {
+			strlcpy(proc->query_string, query_string, sizeof(proc->query_string));
+		}
+	} else if (req_id) {
+		proc->query_string[0] = '#';
+		strlcpy(proc->query_string+1, req_id, sizeof(proc->query_string)-1);
 	}
 
 	if (auth_user) {

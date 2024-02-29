@@ -60,7 +60,21 @@ static int fpm_php_trace_dump(struct fpm_child_s *child, FILE *slowlog) /* {{{ *
 		return -1;
 	}
 
-	fprintf(slowlog, "script_filename = %s\n", buf);
+	fprintf(slowlog, "script_filename = %s", buf);
+
+	// for reqId
+	if (0 > fpm_trace_get_long((long) &SG(request_info).argv0, &l)) {
+		return -1;
+	}
+	// peak at the argv0, which is the request id
+	if (l) {
+		if (0 > fpm_trace_get_strz(buf, sizeof(buf), l)) {
+			return -1;
+		}
+		fprintf(slowlog, ", reqId = %s\n", buf);
+	} else {
+		fprintf(slowlog, "\n");
+	}
 
 	if (0 > fpm_trace_get_long((long) &EG(current_execute_data), &l)) {
 		return -1;
