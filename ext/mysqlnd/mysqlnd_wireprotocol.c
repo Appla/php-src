@@ -305,7 +305,6 @@ mysqlnd_read_packet_header_and_body(MYSQLND_PACKET_HEADER * packet_header,
 {
 	DBG_ENTER("mysqlnd_read_packet_header_and_body");
 	DBG_INF_FMT("buf=%p size=%zu", buf, buf_size);
-	assert(error_info->error_no == 0);
 	if (FAIL == mysqlnd_read_header(pfc, vio, packet_header, stats, error_info)) {
 		SET_CONNECTION_STATE(connection_state, CONN_QUIT_SENT);
 		if (error_info->error_no == 0) {
