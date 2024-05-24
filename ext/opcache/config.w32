@@ -40,6 +40,6 @@ if (PHP_OPCACHE != "no") {
 	}
 
 	ADD_FLAG('CFLAGS_OPCACHE', "/I " + configure_module_dirname);
-
+	PHP_INSTALL_HEADERS('ext/opcache', 'opcache_api_pub.h');
 }
 

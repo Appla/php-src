@@ -24,6 +24,7 @@
 #include "php.h"
 #include "ZendAccelerator.h"
 #include "zend_API.h"
+#include "opcache_api_pub.h"
 #include "zend_shared_alloc.h"
 #include "zend_accelerator_blacklist.h"
 #include "php_ini.h"
@@ -982,3 +983,43 @@ ZEND_FUNCTION(opcache_is_script_cached)
 
 	RETURN_BOOL(filename_is_in_cache(script_name));
 }
+
+/* {{{ Update opcache's request time. */
+ZEND_FUNCTION(opcache_update_request_time)
+{
+	zend_long ts = 0;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_OPTIONAL
+		Z_PARAM_LONG(ts)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!validate_api_restriction()) {
+		RETURN_FALSE;
+	}
+
+	if (!ZCG(accelerator_enabled)) {
+		RETURN_FALSE;
+	}
+
+	// if value less or equal to zero, the original value returned without any change.
+	RETVAL_LONG(ZCG(request_time));
+	if (ts > 0) {
+		ZCG(request_time) = ts;
+	}
+}
+
+LA_OPCACHE_API time_t opcache_update_request_time(time_t ts)
+{
+	time_t orig_ts = ZCG(request_time);
+	// if zero passed, will using sapi_get_request_time's value, this function may use cached value!
+	ZCG(request_time) = ts > 0 ? ts : (time_t)sapi_get_request_time();
+	return orig_ts;
+}
+
+#ifndef ZTS
+LA_OPCACHE_API const void *opcache_get_zcg_ref(void)
+{
+	return (const void *)(&accel_globals);
+}
+#endif // ZTS

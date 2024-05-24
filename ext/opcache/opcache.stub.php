@@ -21,3 +21,5 @@ function opcache_invalidate(string $filename, bool $force = false): bool {}
 function opcache_get_configuration(): array|false {}
 
 function opcache_is_script_cached(string $filename): bool {}
+
+function opcache_update_request_time(int $ts = 0): false|int {}

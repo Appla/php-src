@@ -327,5 +327,8 @@ int main(void) {
     PHP_ADD_BUILD_DIR([$ext_builddir/jit], 1)
     PHP_ADD_MAKEFILE_FRAGMENT($ext_srcdir/jit/Makefile.frag)
   fi
+  ## expose new apis for kdhelp
+  AC_DEFINE(HAVE_OPCACHE_PUB_API, 1, [Define as some ext-opcache apis are available (experimental)])
+  PHP_INSTALL_HEADERS([ext/opcache], [opcache_api_pub.h])
   PHP_SUBST(OPCACHE_SHARED_LIBADD)
 fi
