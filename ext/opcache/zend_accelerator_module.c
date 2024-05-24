@@ -982,3 +982,40 @@ ZEND_FUNCTION(opcache_is_script_cached)
 
 	RETURN_BOOL(filename_is_in_cache(script_name));
 }
+
+/* {{{ Update the . */
+ZEND_FUNCTION(opcache_update_request_time)
+{
+	zend_long ts = 0;
+	zend_long orig_ts;
+
+	ZEND_PARSE_PARAMETERS_START(0, 1)
+		Z_PARAM_LONG(ts)
+	ZEND_PARSE_PARAMETERS_END();
+
+	if (!validate_api_restriction()) {
+		RETURN_FALSE;
+	}
+
+	if (!ZCG(accelerator_enabled)) {
+		RETURN_FALSE;
+	}
+
+	orig_ts = ZCG(request_time);
+	ZCG(request_time) = ts == 0 ? sapi_get_request_time() : ts;
+	RETURN_LONG(orig_ts);
+}
+
+ZEND_API time_t opcache_update_request_time(time_t ts)
+{
+	time_t orig_ts = ZCG(request_time);
+	ZCG(request_time) = ts == 0 ? (time_t)sapi_get_request_time() : ts;
+	return orig_ts;
+}
+
+#ifndef ZTS
+ZEND_API void *opcache_get_zcg_ref()
+{
+	return &accel_globals;
+}
+#endif // NTS

@@ -17,6 +17,10 @@ ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_opcache_invalidate, 0, 1, _IS_BO
 	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, force, _IS_BOOL, 0, "false")
 ZEND_END_ARG_INFO()
 
+ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_opcache_update_request_time, 0, 0, IS_LONG, 0)
+	ZEND_ARG_TYPE_INFO_WITH_DEFAULT_VALUE(0, ts, IS_LONG, 0, "0")
+ZEND_END_ARG_INFO()
+
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_MASK_EX(arginfo_opcache_get_configuration, 0, 0, MAY_BE_ARRAY|MAY_BE_FALSE)
 ZEND_END_ARG_INFO()
 
@@ -29,6 +33,7 @@ ZEND_FUNCTION(opcache_compile_file);
 ZEND_FUNCTION(opcache_invalidate);
 ZEND_FUNCTION(opcache_get_configuration);
 ZEND_FUNCTION(opcache_is_script_cached);
+ZEND_FUNCTION(opcache_update_request_time);
 
 
 static const zend_function_entry ext_functions[] = {
