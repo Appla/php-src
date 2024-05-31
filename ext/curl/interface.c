@@ -257,6 +257,7 @@ PHP_MINFO_FUNCTION(curl)
 	php_info_print_table_start();
 	php_info_print_table_row(2, "cURL support",    "enabled");
 	php_info_print_table_row(2, "cURL Information", d->version);
+	php_info_print_table_row(2, "Build cURL Information", LIBCURL_VERSION);
 	sprintf(str, "%d", d->age);
 	php_info_print_table_row(2, "Age", str);
 
