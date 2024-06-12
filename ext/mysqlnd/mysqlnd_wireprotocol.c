@@ -275,6 +275,10 @@ mysqlnd_read_header(MYSQLND_PFC * pfc, MYSQLND_VIO * vio, MYSQLND_PACKET_HEADER 
 			                                 error_info->error, sizeof(error_info->error),
 			                                 &error_info->error_no, error_info->sqlstate
 			);
+			// @note we temporarily reset special error_no to known one(CR_SERVER_GONE_ERROR) for compatibility
+			if (error_info->error_no == CR_CLIENT_INTERACTION_TIMEOUT) {
+				error_info->error_no = CR_SERVER_GONE_ERROR;
+			}
 			mnd_efree(buf);
 			DBG_RETURN(FAIL);
 		}
