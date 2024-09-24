@@ -3071,6 +3071,13 @@ const CURLINFO_STARTTRANSFER_TIME_T = UNKNOWN;
  * @cvalue CURLINFO_TOTAL_TIME_T
  */
 const CURLINFO_TOTAL_TIME_T = UNKNOWN;
+#if LIBCURL_VERSION_NUM >= 0x080a00 /* Available since 8.10.0 */
+/**
+ * @var int
+ * @cvalue CURLINFO_POSTTRANSFER_TIME_T
+ */
+const CURLINFO_POSTTRANSFER_TIME_T = UNKNOWN;
+#endif
 #if LIBCURL_VERSION_NUM >= 0x080200 /* Available since 8.2.0 */
 /**
  * @var int
