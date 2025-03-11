@@ -2767,6 +2767,17 @@ PHP_FUNCTION(curl_getinfo)
 			CAAS("cainfo", s_code);
 		}
 #endif
+        // CURLE_COULDNT_CONNECT=7, CURLE_FAILED_INIT=2, CURLE_INTERFACE_FAILED=45, CURLE_OPERATION_TIMEDOUT=28, CURLE_RECV_ERROR=56, CURLE_SEND_ERROR=55.
+        if (ch->err.no != 0 && (
+            ch->err.no == 28 ||
+            ch->err.no == 7 ||
+            ch->err.no == 2 ||
+            ch->err.no == 45 ||
+            ch->err.no == 55 ||
+            ch->err.no == 56
+        ) && curl_easy_getinfo(ch->cp, CURLINFO_OS_ERRNO, &l_code) == CURLE_OK) {
+			CAAL("os_errno", l_code);
+        }
 	} else {
 		switch (option) {
 			case CURLINFO_HEADER_OUT:
