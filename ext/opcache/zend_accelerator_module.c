@@ -1017,6 +1017,12 @@ KB_OPCACHE_API time_t opcache_update_request_time(time_t ts)
 	return orig_ts;
 }
 
+// @TODO we may need to check ZCSG(restart_pending) inside?
+KB_OPCACHE_API zend_result opcache_accel_active(int flags)
+{
+	return accel_activate(accel_module_entry.type, accel_module_entry.module_number);
+}
+
 #ifndef ZTS
 KB_OPCACHE_API const void *opcache_get_zcg_ref(void)
 {
