@@ -42,6 +42,15 @@
 #define IN_UNSET	ZEND_GUARD_PROPERTY_UNSET
 #define IN_ISSET	ZEND_GUARD_PROPERTY_ISSET
 
+static zend_always_inline bool zend_objects_check_stack_limit(void)
+{
+#ifdef ZEND_CHECK_STACK_LIMIT
+	return zend_call_stack_overflowed(EG(stack_limit));
+#else
+	return false;
+#endif
+}
+
 /*
   __X accessors explanation:
 
@@ -1714,6 +1723,11 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 {
 	zend_object *zobj1, *zobj2;
 
+	if (zend_objects_check_stack_limit()) {
+		zend_throw_error(NULL, "Maximum call stack size reached during object comparison");
+		return ZEND_UNCOMPARABLE;
+	}
+
 	if (Z_TYPE_P(o1) != Z_TYPE_P(o2)) {
 		/* Object and non-object */
 		zval *object;
@@ -1778,6 +1792,10 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 		}
 		Z_PROTECT_RECURSION_P(o1);
 
+		GC_ADDREF(zobj1);
+		GC_ADDREF(zobj2);
+		int ret;
+
 		for (i = 0; i < zobj1->ce->default_properties_count; i++) {
 			zval *p1, *p2;
 
@@ -1792,35 +1810,50 @@ ZEND_API int zend_std_compare_objects(zval *o1, zval *o2) /* {{{ */
 
 			if (Z_TYPE_P(p1) != IS_UNDEF) {
 				if (Z_TYPE_P(p2) != IS_UNDEF) {
-					int ret;
-
 					ret = zend_compare(p1, p2);
 					if (ret != 0) {
 						Z_UNPROTECT_RECURSION_P(o1);
-						return ret;
+						goto done;
 					}
 				} else {
 					Z_UNPROTECT_RECURSION_P(o1);
-					return 1;
+					ret = 1;
+					goto done;
 				}
 			} else {
 				if (Z_TYPE_P(p2) != IS_UNDEF) {
 					Z_UNPROTECT_RECURSION_P(o1);
-					return 1;
+					ret = 1;
+					goto done;
 				}
 			}
 		}
 
 		Z_UNPROTECT_RECURSION_P(o1);
-		return 0;
+		ret = 0;
+
+done:
+		OBJ_RELEASE(zobj1);
+		OBJ_RELEASE(zobj2);
+
+		return ret;
 	} else {
+		GC_ADDREF(zobj1);
+		GC_ADDREF(zobj2);
+
 		if (!zobj1->properties) {
 			rebuild_object_properties(zobj1);
 		}
 		if (!zobj2->properties) {
 			rebuild_object_properties(zobj2);
 		}
-		return zend_compare_symbol_tables(zobj1->properties, zobj2->properties);
+
+		int ret = zend_compare_symbol_tables(zobj1->properties, zobj2->properties);
+
+		OBJ_RELEASE(zobj1);
+		OBJ_RELEASE(zobj2);
+
+		return ret;
 	}
 }
 /* }}} */

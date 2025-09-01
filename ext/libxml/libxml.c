@@ -331,13 +331,26 @@ PHP_LIBXML_API void php_libxml_node_free_list(xmlNodePtr node)
 				if (curnode->type == XML_ELEMENT_NODE) {
 					/* This ensures that namespace references in this subtree are defined within this subtree,
 					 * otherwise a use-after-free would be possible when the original namespace holder gets freed. */
-#if 0
-					xmlDOMWrapCtxt dummy_ctxt = {0};
-					xmlDOMWrapReconcileNamespaces(&dummy_ctxt, curnode, /* options */ 0);
-#else
-					/* See php_dom.c */
-					xmlReconciliateNs(curnode->doc, curnode);
-#endif
+					if (LIBXML_VERSION < 21300 && UNEXPECTED(curnode->doc == NULL)) {
+						/* xmlReconciliateNs() in these versions just uses the document for xmlNewReconciledNs(),
+						 * which can create an oldNs xml namespace declaration via xmlSearchNs() -> xmlTreeEnsureXMLDecl(). */
+						xmlDoc dummy;
+						memset(&dummy, 0, sizeof(dummy));
+						dummy.type = XML_DOCUMENT_NODE;
+						curnode->doc = &dummy;
+						xmlReconciliateNs(curnode->doc, curnode);
+						curnode->doc = NULL;
+
+						/* Append oldNs to current node's nsDef, which can be at most one node. */
+						if (dummy.oldNs) {
+							ZEND_ASSERT(dummy.oldNs->next == NULL);
+							xmlNsPtr old = curnode->nsDef;
+							curnode->nsDef = dummy.oldNs;
+							dummy.oldNs->next = old;
+						}
+					} else {
+						xmlReconciliateNs(curnode->doc, curnode);
+					}
 				}
 				/* Skip freeing */
 				curnode = next;
@@ -793,13 +806,18 @@ static xmlParserInputPtr _php_libxml_external_entity_loader(const char *URL,
 is_string:
 			resource = Z_STRVAL(retval);
 		} else if (Z_TYPE(retval) == IS_RESOURCE) {
-			php_stream *stream;
-			php_stream_from_zval_no_verify(stream, &retval);
-			if (stream == NULL) {
-				php_libxml_ctx_error(context,
-						"The user entity loader callback '%s' has returned a "
-						"resource, but it is not a stream",
-						ZSTR_VAL(LIBXML(entity_loader_callback).function_handler->common.function_name));
+			php_stream *stream = (php_stream*)zend_fetch_resource2_ex(&retval, NULL, php_file_le_stream(), php_file_le_pstream());
+			if (UNEXPECTED(stream == NULL)) {
+				zval callable;
+				zend_get_callable_zval_from_fcc(&LIBXML(entity_loader_callback), &callable);
+				zend_string *callable_name = zend_get_callable_name(&callable);
+				zend_string *func_name = get_active_function_or_method_name();
+				zend_type_error(
+					"%s(): The user entity loader callback \"%s\" has returned a resource, but it is not a stream",
+					ZSTR_VAL(func_name), ZSTR_VAL(callable_name));
+				zend_string_release(func_name);
+				zend_string_release(callable_name);
+				zval_ptr_dtor(&callable);
 			} else {
 				/* TODO: allow storing the encoding in the stream context? */
 				xmlCharEncoding enc = XML_CHAR_ENCODING_NONE;

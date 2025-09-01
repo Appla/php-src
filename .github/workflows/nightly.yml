@@ -23,12 +23,21 @@ on:
       run_macos_arm64:
         required: true
         type: boolean
+      run_freebsd_zts:
+        required: true
+        type: boolean
       ubuntu_version:
         required: true
         type: string
       windows_version:
         required: true
         type: string
+      vs_crt_version:
+        required: true
+        type: string
+      skip_laravel:
+        required: true
+        type: boolean
       skip_symfony:
         required: true
         type: boolean
@@ -76,6 +85,8 @@ jobs:
         with:
           runTestsParameters: >-
             --asan -x
+      - name: Extra tests
+        uses: ./.github/actions/extra-tests
   ALPINE:
     if: inputs.run_alpine
     name: ALPINE_X64_ASAN_UBSAN_DEBUG_ZTS
@@ -125,6 +136,8 @@ jobs:
             --asan -x
             -d zend_extension=opcache.so
             -d opcache.enable_cli=1
+      - name: Extra tests
+        uses: ./.github/actions/extra-tests
       - name: Notify Slack
         if: failure()
         uses: ./.github/actions/notify-slack
@@ -257,6 +270,8 @@ jobs:
             ${{ matrix.run_tests_parameters }}
             -d zend_extension=opcache.so
             -d opcache.enable_cli=1
+      - name: Extra tests
+        uses: ./.github/actions/extra-tests
       - name: Verify generated files are up to date
         uses: ./.github/actions/verify-generated-files
       - name: Notify Slack
@@ -346,6 +361,8 @@ jobs:
             ${{ matrix.run_tests_parameters }}
             -d zend_extension=opcache.so
             -d opcache.enable_cli=1
+      - name: Extra tests
+        uses: ./.github/actions/extra-tests
       - name: Notify Slack
         if: failure()
         uses: ./.github/actions/notify-slack
@@ -405,6 +422,8 @@ jobs:
           runTestsParameters: >-
             -d zend_extension=opcache.so
             -d opcache.enable_cli=1
+      - name: Extra tests
+        uses: ./.github/actions/extra-tests
       - name: Verify generated files are up to date
         uses: ./.github/actions/verify-generated-files
       - name: Notify Slack
@@ -546,25 +565,28 @@ jobs:
           repositories="amp cache dns file http parallel parser pipeline process serialization socket sync websocket-client websocket-server"
           X=0
           for repository in $repositories; do
-            printf "Testing amp/%s\n" "$repository"
+            echo "::group::$repository"
             git clone "https://github.com/amphp/$repository.git" "amphp-$repository" --depth 1
             cd "amphp-$repository"
             git rev-parse HEAD
-            php /usr/bin/composer install --no-progress --ignore-platform-reqs
+            php /usr/bin/composer install --no-progress --ignore-platform-req=php+
+            EXIT_CODE=0
             vendor/bin/phpunit || EXIT_CODE=$?
+            echo -e "\n::endgroup::"
             if [ ${EXIT_CODE:-0} -gt 128 ]; then
               X=1;
+              echo "Failed"
             fi
             cd ..
           done
           exit $X
       - name: Test Laravel
-        if: ${{ !cancelled() }}
+        if: ${{ !cancelled() && !inputs.skip_laravel }}
         run: |
           git clone https://github.com/laravel/framework.git --depth=1
           cd framework
           git rev-parse HEAD
-          php /usr/bin/composer install --no-progress --ignore-platform-reqs
+          php /usr/bin/composer install --no-progress --ignore-platform-req=php+
           # Hack to disable a test that hangs
           php -r '$c = file_get_contents("tests/Filesystem/FilesystemTest.php"); $c = str_replace("public function testSharedGet()", "#[\\PHPUnit\\Framework\\Attributes\\Group('"'"'skip'"'"')]\n    public function testSharedGet()", $c); file_put_contents("tests/Filesystem/FilesystemTest.php", $c);'
           php vendor/bin/phpunit --exclude-group skip || EXIT_CODE=$?
@@ -577,14 +599,17 @@ jobs:
           repositories="async cache child-process datagram dns event-loop promise promise-stream promise-timer stream"
           X=0
           for repository in $repositories; do
-            printf "Testing reactphp/%s\n" "$repository"
+            echo "::group::$repository"
             git clone "https://github.com/reactphp/$repository.git" "reactphp-$repository" --depth 1
             cd "reactphp-$repository"
             git rev-parse HEAD
-            php /usr/bin/composer install --no-progress --ignore-platform-reqs
+            php /usr/bin/composer install --no-progress --ignore-platform-req=php+
+            EXIT_CODE=0
             vendor/bin/phpunit || EXIT_CODE=$?
+            echo -e "\n::endgroup::"
             if [ $[EXIT_CODE:-0} -gt 128 ]; then
               X=1;
+              echo "Failed"
             fi
             cd ..
           done
@@ -595,7 +620,7 @@ jobs:
           git clone https://github.com/revoltphp/event-loop.git --depth=1
           cd event-loop
           git rev-parse HEAD
-          php /usr/bin/composer install --no-progress --ignore-platform-reqs
+          php /usr/bin/composer install --no-progress --ignore-platform-req=php+
           vendor/bin/phpunit || EXIT_CODE=$?
           if [ ${EXIT_CODE:-0} -gt 128 ]; then
             exit 1
@@ -606,18 +631,22 @@ jobs:
           git clone https://github.com/symfony/symfony.git --depth=1
           cd symfony
           git rev-parse HEAD
-          php /usr/bin/composer install --no-progress --ignore-platform-reqs
+          php /usr/bin/composer install --no-progress --ignore-platform-req=php+
           php ./phpunit install
           # Test causes a heap-buffer-overflow but I cannot reproduce it locally...
-          php -r '$c = file_get_contents("src/Symfony/Component/HtmlSanitizer/Tests/HtmlSanitizerCustomTest.php"); $c = str_replace("public function testSanitizeDeepNestedString()", "/** @group skip */\n    public function testSanitizeDeepNestedString()", $c); file_put_contents("src/Symfony/Component/HtmlSanitizer/Tests/HtmlSanitizerCustomTest.php", $c);'
+          php -r '$c = file_get_contents("src/Symfony/Component/HtmlSanitizer/Tests/HtmlSanitizerCustomTest.php"); $c = str_replace("public function testSanitizeDeepNestedString()", "#[\\PHPUnit\\Framework\\Attributes\\Group('"'"'skip'"'"')]\n    public function testSanitizeDeepNestedString()", $c); file_put_contents("src/Symfony/Component/HtmlSanitizer/Tests/HtmlSanitizerCustomTest.php", $c);'
           # Buggy FFI test in Symfony, see https://github.com/symfony/symfony/issues/47668
-          php -r '$c = file_get_contents("src/Symfony/Component/VarDumper/Tests/Caster/FFICasterTest.php"); $c = str_replace("public function testCastNonTrailingCharPointer()", "/** @group skip */\n    public function testCastNonTrailingCharPointer()", $c); file_put_contents("src/Symfony/Component/VarDumper/Tests/Caster/FFICasterTest.php", $c);'
+          php -r '$c = file_get_contents("src/Symfony/Component/VarDumper/Tests/Caster/FFICasterTest.php"); $c = str_replace("public function testCastNonTrailingCharPointer()", "#[\\PHPUnit\\Framework\\Attributes\\Group('"'"'skip'"'"')]\n    public function testCastNonTrailingCharPointer()", $c); file_put_contents("src/Symfony/Component/VarDumper/Tests/Caster/FFICasterTest.php", $c);'
           export SYMFONY_DEPRECATIONS_HELPER=max[total]=999
           X=0
           for component in $(find src/Symfony -mindepth 2 -type f -name phpunit.xml.dist -printf '%h\n'); do
-            php ./phpunit $component --exclude-group tty,benchmark,intl-data,transient --exclude-group skip || EXIT_CODE=$?
+            echo "::group::$component"
+            EXIT_CODE=0
+            php ./phpunit $component --exclude-group tty --exclude-group benchmark --exclude-group intl-data --exclude-group transient --exclude-group skip || EXIT_CODE=$?
+            echo -e "\n::endgroup::"
             if [ ${EXIT_CODE:-0} -gt 128 ]; then
               X=1;
+              echo "Failed"
             fi
           done
           exit $X
@@ -627,7 +656,7 @@ jobs:
           git clone https://github.com/sebastianbergmann/phpunit.git --branch=main --depth=1
           cd phpunit
           git rev-parse HEAD
-          php /usr/bin/composer install --no-progress --ignore-platform-reqs
+          php /usr/bin/composer install --no-progress --ignore-platform-req=php+
           php ./phpunit || EXIT_CODE=$?
           if [ ${EXIT_CODE:-0} -gt 128 ]; then
             exit 1
@@ -635,7 +664,7 @@ jobs:
       - name: 'Symfony Preloading'
         if: ${{ !cancelled() && !inputs.skip_symfony }}
         run: |
-          php /usr/bin/composer create-project symfony/symfony-demo symfony_demo --no-progress --ignore-platform-reqs
+          php /usr/bin/composer create-project symfony/symfony-demo symfony_demo --no-progress --ignore-platform-req=php+
           cd symfony_demo
           git rev-parse HEAD
           sed -i 's/PHP_SAPI/"cli-server"/g' var/cache/dev/App_KernelDevDebugContainer.preload.php
@@ -646,7 +675,7 @@ jobs:
           git clone https://github.com/WordPress/wordpress-develop.git wordpress --depth=1
           cd wordpress
           git rev-parse HEAD
-          php /usr/bin/composer install --no-progress --ignore-platform-reqs
+          php /usr/bin/composer install --no-progress --ignore-platform-req=php+
           cp wp-tests-config-sample.php wp-tests-config.php
           sed -i 's/youremptytestdbnamehere/test/g' wp-tests-config.php
           sed -i 's/yourusernamehere/root/g' wp-tests-config.php
@@ -1028,7 +1057,7 @@ jobs:
       PHP_BUILD_OBJ_DIR: C:\obj
       PHP_BUILD_CACHE_SDK_DIR: C:\build-cache\sdk
       PHP_BUILD_SDK_BRANCH: php-sdk-2.3.0
-      PHP_BUILD_CRT: ${{ inputs.windows_version == '2022' && 'vs17' || 'vs16' }}
+      PHP_BUILD_CRT: ${{ inputs.vs_crt_version }}
       PLATFORM: ${{ matrix.x64 && 'x64' || 'x86' }}
       THREAD_SAFE: "${{ matrix.zts && '1' || '0' }}"
       INTRINSICS: "${{ matrix.zts && 'AVX2' || '' }}"
@@ -1049,8 +1078,15 @@ jobs:
       - name: Test
         run: .github/scripts/windows/test.bat
   FREEBSD:
-    name: FREEBSD
+    strategy:
+      fail-fast: false
+      matrix:
+        zts: [true, false]
+        exclude:
+          - zts: ${{ !inputs.run_freebsd_zts && true || '*never*' }}
+    name: "FREEBSD_${{ matrix.zts && 'ZTS' || 'NTS' }}"
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - name: git checkout
         uses: actions/checkout@v4
@@ -1058,3 +1094,7 @@ jobs:
           ref: ${{ inputs.branch }}
       - name: FreeBSD
         uses: ./.github/actions/freebsd
+        with:
+          configurationParameters: >-
+            --${{ matrix.zts && 'enable' || 'disable' }}-zts
+          runExtraTests: true

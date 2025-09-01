@@ -401,6 +401,7 @@ static zend_never_inline zend_long ZEND_FASTCALL zendi_try_get_long(const zval *
 				zend_long lval;
 				double dval;
 				bool trailing_data = false;
+				zend_string *op_str = NULL; /* protect against error handlers */
 
 				/* For BC reasons we allow errors so that we can warn on leading numeric string */
 				type = is_numeric_string_ex(Z_STRVAL_P(op), Z_STRLEN_P(op), &lval, &dval,
@@ -410,6 +411,9 @@ static zend_never_inline zend_long ZEND_FASTCALL zendi_try_get_long(const zval *
 					return 0;
 				}
 				if (UNEXPECTED(trailing_data)) {
+					if (type != IS_LONG) {
+						op_str = zend_string_copy(Z_STR_P(op));
+					}
 					zend_error(E_WARNING, "A non-numeric value encountered");
 					if (UNEXPECTED(EG(exception))) {
 						*failed = 1;
@@ -425,11 +429,12 @@ static zend_never_inline zend_long ZEND_FASTCALL zendi_try_get_long(const zval *
 					 */
 					lval = zend_dval_to_lval_cap(dval);
 					if (!zend_is_long_compatible(dval, lval)) {
-						zend_incompatible_string_to_long_error(Z_STR_P(op));
+						zend_incompatible_string_to_long_error(op_str ? op_str : Z_STR_P(op));
 						if (UNEXPECTED(EG(exception))) {
 							*failed = 1;
 						}
 					}
+					zend_tmp_string_release(op_str);
 					return lval;
 				}
 			}
@@ -3379,7 +3384,19 @@ static int hash_zval_compare_function(zval *z1, zval *z2) /* {{{ */
 
 ZEND_API int ZEND_FASTCALL zend_compare_symbol_tables(HashTable *ht1, HashTable *ht2) /* {{{ */
 {
-	return ht1 == ht2 ? 0 : zend_hash_compare(ht1, ht2, (compare_func_t) hash_zval_compare_function, 0);
+	if (ht1 == ht2) {
+		return 0;
+	}
+
+	GC_TRY_ADDREF(ht1);
+	GC_TRY_ADDREF(ht2);
+
+	int ret = zend_hash_compare(ht1, ht2, (compare_func_t) hash_zval_compare_function, 0);
+
+	GC_TRY_DTOR_NO_REF(ht1);
+	GC_TRY_DTOR_NO_REF(ht2);
+
+	return ret;
 }
 /* }}} */
 

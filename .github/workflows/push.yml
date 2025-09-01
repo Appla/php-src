@@ -181,7 +181,7 @@ jobs:
             -d opcache.enable_cli=1
   MACOS_DEBUG_NTS:
     if: github.repository == 'php/php-src' || github.event_name == 'pull_request'
-    runs-on: macos-13
+    runs-on: macos-14
     steps:
       - name: git checkout
         uses: actions/checkout@v4
@@ -199,7 +199,7 @@ jobs:
           configurationParameters: --enable-debug --disable-zts
       - name: make
         run: |-
-          export PATH="/usr/local/opt/bison/bin:$PATH"
+          export PATH="$(brew --prefix)/opt/bison/bin:$PATH"
           make -j$(sysctl -n hw.logicalcpu) >/dev/null
       - name: make install
         run: sudo make install
@@ -216,7 +216,7 @@ jobs:
   WINDOWS:
     if: github.repository == 'php/php-src' || github.event_name == 'pull_request'
     name: WINDOWS_X64_ZTS
-    runs-on: windows-2019
+    runs-on: windows-2022
     env:
       PHP_BUILD_CACHE_BASE_DIR: C:\build-cache
       PHP_BUILD_OBJ_DIR: C:\obj
@@ -337,8 +337,10 @@ jobs:
             $(git merge-base ${{ github.event.pull_request.base.sha }} ${{ github.sha }}) \
             > $GITHUB_STEP_SUMMARY
   FREEBSD:
+    if: github.repository == 'php/php-src' || github.event_name == 'pull_request'
     name: FREEBSD
     runs-on: ubuntu-latest
+    timeout-minutes: 50
     steps:
       - name: git checkout
         uses: actions/checkout@v4

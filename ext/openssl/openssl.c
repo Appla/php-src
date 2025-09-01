@@ -1095,7 +1095,7 @@ static int php_openssl_load_rand_file(const char * file, int *egdsocket, int *se
 		return SUCCESS;
 #endif
 	}
-	if (file == NULL || !RAND_load_file(file, -1)) {
+	if (file == NULL || RAND_load_file(file, -1) < 0) {
 		if (RAND_status() == 0) {
 			php_openssl_store_errors();
 			php_error_docref(NULL, E_WARNING, "Unable to load random state; not enough random data!");
@@ -1122,7 +1122,7 @@ static int php_openssl_write_rand_file(const char * file, int egdsocket, int see
 		file = RAND_file_name(buffer, sizeof(buffer));
 	}
 	PHP_OPENSSL_RAND_ADD_TIME();
-	if (file == NULL || !RAND_write_file(file)) {
+	if (file == NULL || RAND_write_file(file) < 0) {
 		php_openssl_store_errors();
 		php_error_docref(NULL, E_WARNING, "Unable to write random state");
 		return FAILURE;
@@ -2421,6 +2421,7 @@ static X509_STORE *php_openssl_setup_verify(zval *calist, uint32_t arg_num)
 		ZEND_HASH_FOREACH_VAL(Z_ARRVAL_P(calist), item) {
 			zend_string *str = zval_try_get_string(item);
 			if (UNEXPECTED(!str)) {
+				X509_STORE_free(store);
 				return NULL;
 			}
 
@@ -5199,11 +5200,19 @@ PHP_FUNCTION(openssl_pkey_get_details)
 }
 /* }}} */
 
-static zend_string *php_openssl_pkey_derive(EVP_PKEY *key, EVP_PKEY *peer_key, size_t key_size) {
+static zend_string *php_openssl_pkey_derive(EVP_PKEY *key, EVP_PKEY *peer_key, size_t requested_key_size) {
+	size_t key_size = requested_key_size;
 	EVP_PKEY_CTX *ctx = EVP_PKEY_CTX_new(key, NULL);
 	if (!ctx) {
 		return NULL;
 	}
+
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+	/* OpenSSL 1.1 does not respect key_size for DH, so force size discovery so it can be compared later. */
+	if (EVP_PKEY_base_id(key) == EVP_PKEY_DH && key_size != 0) {
+		key_size = 0;
+	}
+#endif
 
 	if (EVP_PKEY_derive_init(ctx) <= 0 ||
 			EVP_PKEY_derive_set_peer(ctx, peer_key) <= 0 ||
@@ -5212,6 +5221,14 @@ static zend_string *php_openssl_pkey_derive(EVP_PKEY *key, EVP_PKEY *peer_key, s
 		EVP_PKEY_CTX_free(ctx);
 		return NULL;
 	}
+
+#if OPENSSL_VERSION_NUMBER < 0x30000000L
+	/* Now compare the computed size for DH to mirror OpenSSL 3.0+ behavior. */
+	if (EVP_PKEY_base_id(key) == EVP_PKEY_DH && requested_key_size > 0 && requested_key_size < key_size) {
+		EVP_PKEY_CTX_free(ctx);
+		return NULL;
+	}
+#endif
 
 	zend_string *result = zend_string_alloc(key_size, 0);
 	if (EVP_PKEY_derive(ctx, (unsigned char *)ZSTR_VAL(result), &key_size) <= 0) {
@@ -5742,8 +5759,8 @@ PHP_FUNCTION(openssl_pkcs7_read)
 				BIO_get_mem_ptr(bio_out, &bio_buf);
 				ZVAL_STRINGL(&zcert, bio_buf->data, bio_buf->length);
 				add_index_zval(zout, i, &zcert);
-				BIO_free(bio_out);
 			}
+			BIO_free(bio_out);
 		}
 	}
 
@@ -5757,8 +5774,8 @@ PHP_FUNCTION(openssl_pkcs7_read)
 				BIO_get_mem_ptr(bio_out, &bio_buf);
 				ZVAL_STRINGL(&zcert, bio_buf->data, bio_buf->length);
 				add_index_zval(zout, i, &zcert);
-				BIO_free(bio_out);
 			}
+			BIO_free(bio_out);
 		}
 	}
 
@@ -6383,8 +6400,8 @@ PHP_FUNCTION(openssl_cms_read)
 				BIO_get_mem_ptr(bio_out, &bio_buf);
 				ZVAL_STRINGL(&zcert, bio_buf->data, bio_buf->length);
 				add_index_zval(zout, i, &zcert);
-				BIO_free(bio_out);
 			}
+			BIO_free(bio_out);
 		}
 	}
 
@@ -6398,8 +6415,8 @@ PHP_FUNCTION(openssl_cms_read)
 				BIO_get_mem_ptr(bio_out, &bio_buf);
 				ZVAL_STRINGL(&zcert, bio_buf->data, bio_buf->length);
 				add_index_zval(zout, i, &zcert);
-				BIO_free(bio_out);
 			}
+			BIO_free(bio_out);
 		}
 	}
 
@@ -6959,6 +6976,7 @@ PHP_FUNCTION(openssl_sign)
 		mdtype = php_openssl_get_evp_md_from_algo(method_long);
 	}
 	if (!mdtype) {
+		EVP_PKEY_free(pkey);
 		php_error_docref(NULL, E_WARNING, "Unknown digest algorithm");
 		RETURN_FALSE;
 	}
@@ -7473,7 +7491,7 @@ static int php_openssl_validate_iv(const char **piv, size_t *piv_len, size_t iv_
 	char *iv_new;
 
 	if (mode->is_aead) {
-		if (EVP_CIPHER_CTX_ctrl(cipher_ctx, mode->aead_ivlen_flag, *piv_len, NULL) != 1) {
+		if (EVP_CIPHER_CTX_ctrl(cipher_ctx, mode->aead_ivlen_flag, *piv_len, NULL) <= 0) {
 			php_error_docref(NULL, E_WARNING, "Setting of IV length for AEAD mode failed");
 			return FAILURE;
 		}
@@ -7545,7 +7563,7 @@ static int php_openssl_cipher_init(const EVP_CIPHER *cipher_type,
 		return FAILURE;
 	}
 	if (mode->set_tag_length_always || (enc && mode->set_tag_length_when_encrypting)) {
-		if (!EVP_CIPHER_CTX_ctrl(cipher_ctx, mode->aead_set_tag_flag, tag_len, NULL)) {
+		if (EVP_CIPHER_CTX_ctrl(cipher_ctx, mode->aead_set_tag_flag, tag_len, NULL) <= 0) {
 			php_error_docref(NULL, E_WARNING, "Setting tag length for AEAD cipher failed");
 			return FAILURE;
 		}
@@ -7553,7 +7571,7 @@ static int php_openssl_cipher_init(const EVP_CIPHER *cipher_type,
 	if (!enc && tag && tag_len > 0) {
 		if (!mode->is_aead) {
 			php_error_docref(NULL, E_WARNING, "The tag cannot be used because the cipher algorithm does not support AEAD");
-		} else if (!EVP_CIPHER_CTX_ctrl(cipher_ctx, mode->aead_set_tag_flag, tag_len, (unsigned char *) tag)) {
+		} else if (EVP_CIPHER_CTX_ctrl(cipher_ctx, mode->aead_set_tag_flag, tag_len, (unsigned char *) tag) <= 0) {
 			php_error_docref(NULL, E_WARNING, "Setting tag for AEAD cipher decryption failed");
 			return FAILURE;
 		}
@@ -7691,7 +7709,7 @@ PHP_OPENSSL_API zend_string* php_openssl_encrypt(
 		if (mode.is_aead && tag) {
 			zend_string *tag_str = zend_string_alloc(tag_len, 0);
 
-			if (EVP_CIPHER_CTX_ctrl(cipher_ctx, mode.aead_get_tag_flag, tag_len, ZSTR_VAL(tag_str)) == 1) {
+			if (EVP_CIPHER_CTX_ctrl(cipher_ctx, mode.aead_get_tag_flag, tag_len, ZSTR_VAL(tag_str)) > 0) {
 				ZSTR_VAL(tag_str)[tag_len] = '\0';
 				ZSTR_LEN(tag_str) = tag_len;
 				ZEND_TRY_ASSIGN_REF_NEW_STR(tag, tag_str);
@@ -7939,11 +7957,10 @@ PHP_OPENSSL_API zend_string* php_openssl_random_pseudo_bytes(zend_long buffer_le
 	PHP_OPENSSL_CHECK_LONG_TO_INT_NULL_RETURN(buffer_length, length);
 	PHP_OPENSSL_RAND_ADD_TIME();
 	if (RAND_bytes((unsigned char*)ZSTR_VAL(buffer), (int)buffer_length) <= 0) {
+		php_openssl_store_errors();
 		zend_string_release_ex(buffer, 0);
 		zend_throw_exception(zend_ce_exception, "Error reading from source device", 0);
 		return NULL;
-	} else {
-		php_openssl_store_errors();
 	}
 
 	return buffer;
@@ -7960,17 +7977,15 @@ PHP_FUNCTION(openssl_random_pseudo_bytes)
 		RETURN_THROWS();
 	}
 
-	if (zstrong_result_returned) {
-		ZEND_TRY_ASSIGN_REF_FALSE(zstrong_result_returned);
-	}
-
 	if ((buffer = php_openssl_random_pseudo_bytes(buffer_length))) {
 		ZSTR_VAL(buffer)[buffer_length] = 0;
 		RETVAL_NEW_STR(buffer);
-	}
 
-	if (zstrong_result_returned) {
-		ZEND_TRY_ASSIGN_REF_TRUE(zstrong_result_returned);
+		if (zstrong_result_returned) {
+			ZEND_TRY_ASSIGN_REF_TRUE(zstrong_result_returned);
+		}
+	} else if (zstrong_result_returned) {
+		ZEND_TRY_ASSIGN_REF_FALSE(zstrong_result_returned);
 	}
 }
 /* }}} */
