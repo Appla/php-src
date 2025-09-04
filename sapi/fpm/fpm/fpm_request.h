@@ -21,6 +21,7 @@ struct timeval;
 
 void fpm_request_check_timed_out(struct fpm_child_s *child, struct timeval *tv, int terminate_timeout, int slowlog_timeout, int track_finished);
 int fpm_request_is_idle(struct fpm_child_s *child);
+int fpm_request_is_idle_with_reuse_count(struct fpm_child_s *child, int *reuse_cnt);
 const char *fpm_request_get_stage_name(int stage);
 int fpm_request_last_activity(struct fpm_child_s *child, struct timeval *tv);
 

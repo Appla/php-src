@@ -243,6 +243,7 @@ int fpm_status_handle_request(void) /* {{{ */
 					"<tr><th>listen queue len</th><td>%u</td></tr>\n"
 					"<tr><th>idle processes</th><td>%d</td></tr>\n"
 					"<tr><th>active processes</th><td>%d</td></tr>\n"
+					"<tr><th>reused processes</th><td>%d</td></tr>\n"
 					"<tr><th>total processes</th><td>%d</td></tr>\n"
 					"<tr><th>max active processes</th><td>%d</td></tr>\n"
 					"<tr><th>max children reached</th><td>%u</td></tr>\n"
@@ -260,6 +261,7 @@ int fpm_status_handle_request(void) /* {{{ */
 						"<th>start time</th>"
 						"<th>start since</th>"
 						"<th>requests</th>"
+						"<th>rused</th>"
 						"<th>request duration</th>"
 						"<th>request method</th>"
 						"<th>request uri</th>"
@@ -275,6 +277,7 @@ int fpm_status_handle_request(void) /* {{{ */
 						"<td>%d</td>"
 						"<td>%s</td>"
 						"<td>%s</td>"
+						"<td>%lu</td>"
 						"<td>%lu</td>"
 						"<td>%lu</td>"
 						"<td>%lu</td>"
@@ -309,6 +312,7 @@ int fpm_status_handle_request(void) /* {{{ */
 				"<listen-queue-len>%u</listen-queue-len>\n"
 				"<idle-processes>%d</idle-processes>\n"
 				"<active-processes>%d</active-processes>\n"
+				"<reused-processes>%d</reused-processes>\n"
 				"<total-processes>%d</total-processes>\n"
 				"<max-active-processes>%d</max-active-processes>\n"
 				"<max-children-reached>%u</max-children-reached>\n"
@@ -325,6 +329,7 @@ int fpm_status_handle_request(void) /* {{{ */
 							"<start-time>%s</start-time>"
 							"<start-since>%lu</start-since>"
 							"<requests>%lu</requests>"
+							"<reused>%lu</reused>"
 							"<request-duration>%lu</request-duration>"
 							"<request-method>%s</request-method>"
 							"<request-uri>%s%s%s</request-uri>"
@@ -357,6 +362,7 @@ int fpm_status_handle_request(void) /* {{{ */
 				"\"listen queue len\":%u,"
 				"\"idle processes\":%d,"
 				"\"active processes\":%d,"
+				"\"reused processes\":%d,"
 				"\"total processes\":%d,"
 				"\"max active processes\":%d,"
 				"\"max children reached\":%u,"
@@ -374,6 +380,7 @@ int fpm_status_handle_request(void) /* {{{ */
 					"\"start time\":%s,"
 					"\"start since\":%lu,"
 					"\"requests\":%lu,"
+					"\"reused\":%lu,"
 					"\"request duration\":%lu,"
 					"\"request method\":\"%s\","
 					"\"request uri\":\"%s%s%s\","
@@ -417,6 +424,9 @@ int fpm_status_handle_request(void) /* {{{ */
 				"# HELP phpfpm_active_processes The number of active processes.\n"
 				"# TYPE phpfpm_active_processes gauge\n"
 				"phpfpm_active_processes %d\n"
+				"# HELP phpfpm_reused_active_processes The number of reused active processes.\n"
+				"# TYPE phpfpm_reused_active_processes gauge\n"
+				"phpfpm_reused_active_processes %d\n"
 				"# HELP phpfpm_total_processes The number of idle + active processes.\n"
 				"# TYPE phpfpm_total_processes gauge\n"
 				"phpfpm_total_processes %d\n"
@@ -457,6 +467,7 @@ int fpm_status_handle_request(void) /* {{{ */
 				"listen queue len:     %u\n"
 				"idle processes:       %d\n"
 				"active processes:     %d\n"
+				"reused processes:     %d\n"
 				"total processes:      %d\n"
 				"max active processes: %d\n"
 				"max children reached: %u\n"
@@ -471,6 +482,7 @@ int fpm_status_handle_request(void) /* {{{ */
 						"start time:           %s\n"
 						"start since:          %lu\n"
 						"requests:             %lu\n"
+						"reused:               %lu\n"
 						"request duration:     %lu\n"
 						"request method:       %s\n"
 						"request URI:          %s%s%s\n"
@@ -496,6 +508,7 @@ int fpm_status_handle_request(void) /* {{{ */
 					scoreboard_p->lq_len,
 					scoreboard_p->idle,
 					scoreboard_p->active,
+					scoreboard_p->reused,
 					scoreboard_p->idle + scoreboard_p->active,
 					scoreboard_p->active_max,
 					scoreboard_p->max_children_reached,
@@ -511,6 +524,7 @@ int fpm_status_handle_request(void) /* {{{ */
 					scoreboard_p->lq_len,
 					scoreboard_p->idle,
 					scoreboard_p->active,
+					scoreboard_p->reused,
 					scoreboard_p->idle + scoreboard_p->active,
 					scoreboard_p->active_max,
 					scoreboard_p->max_children_reached,
@@ -598,6 +612,7 @@ int fpm_status_handle_request(void) /* {{{ */
 					time_buffer,
 					(unsigned long) (now_epoch - proc->start_epoch),
 					proc->requests,
+					proc->used >> 3,
 					(unsigned long) (duration.tv_sec * 1000000UL + duration.tv_usec),
 					proc->request_method[0] != '\0' ? proc->request_method : "-",
 					proc->request_uri[0] != '\0' ? proc->request_uri : "-",

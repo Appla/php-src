@@ -63,6 +63,7 @@ void fpm_request_reading_headers(void)
 	struct fpm_scoreboard_proc_s *proc;
 
 	struct timeval now;
+	int reused_times = 0;
 	clock_t now_epoch;
 #ifdef HAVE_TIMES
 	struct tms cpu;
@@ -96,10 +97,19 @@ void fpm_request_reading_headers(void)
 	proc->query_string[0] = '\0';
 	proc->auth_user[0] = '\0';
 	proc->content_length = 0;
+	// @note reuse this field as keepalive connection reuse counter.
+	// 000
+	reused_times = (proc->used += 8) >> 3;
 	fpm_scoreboard_proc_release(proc);
 
-	/* idle--, active++, request++ */
-	fpm_scoreboard_update_commit(-1, 1, 0, 0, 1, 0, 0, FPM_SCOREBOARD_ACTION_INC, NULL);
+	// means this is used for multiple times
+	if (reused_times > 1) {
+		/* request++, lq_len if reused_times == 2 */
+		fpm_scoreboard_update_commit(0, 0, 0, reused_times == 2 ? 1 : 0, 1, 0, 0, FPM_SCOREBOARD_ACTION_INC, NULL);
+	} else {
+		/* idle--, active++, request++ */
+		fpm_scoreboard_update_commit(-1, 1, 0, 0, 1, 0, 0, FPM_SCOREBOARD_ACTION_INC, NULL);
+	}
 }
 
 void fpm_request_info(void)
@@ -218,6 +228,7 @@ void fpm_request_finished(void)
 {
 	struct fpm_scoreboard_proc_s *proc;
 	struct timeval now;
+	int reused_times;
 
 	fpm_clock_get(&now);
 
@@ -226,10 +237,18 @@ void fpm_request_finished(void)
 		zlog(ZLOG_WARNING, "failed to acquire proc scoreboard");
 		return;
 	}
-
+	reused_times = (proc->used += 8) >> 3;
+	// @note reuse this field as keepalive connection reuse counter, when this function got called, the connection is already closed, so we reset the counter.
+	if (reused_times > 0) {
+		proc->used = proc->used & 0x01;
+	}
 	proc->request_stage = FPM_REQUEST_FINISHED;
 	proc->tv = now;
 	fpm_scoreboard_proc_release(proc);
+	if (reused_times > 1) {
+		/* reused--, via lq_len if reused_times > 1 */
+		fpm_scoreboard_update_commit(0, 0, 0, -1, 0, 0, 0, FPM_SCOREBOARD_ACTION_INC, NULL);
+	}
 }
 
 void fpm_request_check_timed_out(struct fpm_child_s *child, struct timeval *now, int terminate_timeout, int slowlog_timeout, int track_finished) /* {{{ */
@@ -301,6 +320,20 @@ int fpm_request_is_idle(struct fpm_child_s *child) /* {{{ */
 		return 0;
 	}
 
+	return proc->request_stage == FPM_REQUEST_ACCEPTING;
+}
+/* }}} */
+
+int fpm_request_is_idle_with_reuse_count(struct fpm_child_s *child, int *reuse_cnt) /* {{{ */
+{
+	struct fpm_scoreboard_proc_s *proc;
+
+	/* no need in atomicity here */
+	proc = fpm_scoreboard_proc_get_from_child(child);
+	if (!proc) {
+		return 0;
+	}
+	*reuse_cnt = proc->used >> 3;
 	return proc->request_stage == FPM_REQUEST_ACCEPTING;
 }
 /* }}} */

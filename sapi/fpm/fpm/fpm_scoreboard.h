@@ -61,6 +61,7 @@ struct fpm_scoreboard_s {
 	time_t start_epoch;
 	int idle;
 	int active;
+	int reused;
 	int active_max;
 	unsigned long int requests;
 	unsigned int max_children_reached;
