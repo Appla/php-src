@@ -333,6 +333,7 @@ static void fpm_pctl_perform_idle_server_maintenance(struct timeval *now) /* {{{
 		struct fpm_child_s *last_idle_child = NULL;
 		int idle = 0;
 		int active = 0;
+		int reused = 0;
 		int children_to_fork;
 		unsigned cur_lq = 0;
 
@@ -359,7 +360,8 @@ static void fpm_pctl_perform_idle_server_maintenance(struct timeval *now) /* {{{
 		fpm_scoreboard_update_begin(wp->scoreboard);
 
 		for (child = wp->children; child; child = child->next) {
-			if (fpm_request_is_idle(child)) {
+			int reuse_cnt = 0;
+			if (fpm_request_is_idle_with_reuse_count(child, &reuse_cnt)) {
 				if (last_idle_child == NULL) {
 					last_idle_child = child;
 				} else {
@@ -370,10 +372,13 @@ static void fpm_pctl_perform_idle_server_maintenance(struct timeval *now) /* {{{
 				idle++;
 			} else {
 				active++;
+				if (reuse_cnt > 0) {
+					reused--;
+				}
 			}
 		}
 
-		fpm_scoreboard_update_commit(idle, active, cur_lq, -1, -1, -1, 0, FPM_SCOREBOARD_ACTION_SET, wp->scoreboard);
+		fpm_scoreboard_update_commit(idle, active, cur_lq, -1, -1, -1, reused, FPM_SCOREBOARD_ACTION_SET, wp->scoreboard);
 
 		/* this is specific to PM_STYLE_ONDEMAND */
 		if (wp->config->pm == PM_STYLE_ONDEMAND) {

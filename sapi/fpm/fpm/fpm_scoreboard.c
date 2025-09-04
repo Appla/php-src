@@ -175,12 +175,24 @@ void fpm_scoreboard_update_commit(
 		}
 		if (slow_rq > 0) {
 			scoreboard->slow_rq = slow_rq;
+		} else if (slow_rq < 0) {
+			// we reuse this as a reused connections counter.
+			scoreboard->reused = -slow_rq;
 		}
 	} else {
 		if (scoreboard->idle + idle > 0) {
 			scoreboard->idle += idle;
 		} else {
 			scoreboard->idle = 0;
+		}
+
+		// we use this to record the currently keepalive/reused connections.
+		if (lq_len != 0) {
+			if (scoreboard->reused + lq_len > 0) {
+				scoreboard->reused += lq_len;
+			} else {
+				scoreboard->reused = 0;
+			}
 		}
 
 		if (scoreboard->active + active > 0) {
