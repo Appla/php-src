@@ -2520,7 +2520,7 @@ PHPAPI bool php_execute_script(zend_file_handle *primary_file)
 			append_file_p = &append_file;
 		}
 		if (PG(max_input_time) != -1) {
-#ifdef PHP_WIN32
+#ifdef PHP_WIN32 || defined(ZEND_MAX_EXECUTION_TIMERS)
 			zend_unset_timeout();
 #endif
 			zend_set_timeout(INI_INT("max_execution_time"), 0);

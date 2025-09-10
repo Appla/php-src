@@ -2275,7 +2275,7 @@ static bool php_cli_server_dispatch_router(php_cli_server *server, php_cli_serve
 		 * because it does not provide a way to get the return value of the main script, so we need
 		 * to restart the timer manually. */
 		if (PG(max_input_time) != -1) {
-#ifdef PHP_WIN32
+#ifdef PHP_WIN32 || defined(ZEND_MAX_EXECUTION_TIMERS)
 			zend_unset_timeout();
 #endif
 			zend_set_timeout(INI_INT("max_execution_time"), 0);
