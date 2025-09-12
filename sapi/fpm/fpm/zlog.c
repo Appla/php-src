@@ -253,6 +253,18 @@ void vzlog(const char *function, int line, int flags, const char *fmt, va_list a
 			!launched && (flags & ZLOG_LEVEL_MASK) >= ZLOG_NOTICE) {
 		zend_quiet_write(STDERR_FILENO, buf, len);
 	}
+#ifdef HAVE_SYSLOG_H
+	// We add warning and above to syslog as well
+	if ((flags&0x10000) && (flags & ZLOG_LEVEL_MASK) >= ZLOG_WARNING) {
+		struct timeval tv;
+		struct tm t_tm;
+		char tm_buf[32] = { 0 };
+		gettimeofday(&tv, 0);
+		buf[len - 1] = '\0';
+		(void)strftime(tm_buf, sizeof(tm_buf), "%Y-%m-%d %H:%M:%S", localtime_r((const time_t *) &tv.tv_sec, &t_tm));
+		php_syslog(syslog_priorities[zlog_level] | LOG_LOCAL4, "{\"message\":\"%s\",\"level\":\"ERROR\",\"channel\":\"php-manager\",\"datetime\":\"%s.%06d\",\"service_name\":\"PHP-FPM\",\"breakpoint\":\"error:catch:error\",\"request_id\":\"%d\"}", buf, tm_buf, tv.tv_usec, getpid());
+	}
+#endif
 }
 /* }}} */
 

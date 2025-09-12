@@ -228,6 +228,7 @@ void fpm_children_bury(void)
 		char buf[128];
 		int severity = ZLOG_NOTICE;
 		int restart_child = 1;
+		int log_flags = 0;
 
 		child = fpm_child_find(pid);
 
@@ -258,6 +259,10 @@ void fpm_children_bury(void)
 				signame = "";
 			}
 
+			// dupe to syslog if SIGSEGV
+			if (WTERMSIG(status) == SIGSEGV) {
+				log_flags |= 0x10000;
+			}
 			snprintf(buf, sizeof(buf), "on signal %d (%s%s)", WTERMSIG(status), signame, have_core);
 
 			/* if it's been killed because of dynamic process management
@@ -297,7 +302,7 @@ void fpm_children_bury(void)
 				if (!fpm_pctl_can_spawn_children()) {
 					severity = ZLOG_DEBUG;
 				}
-				zlog(severity, "[pool %s] child %d exited %s after %ld.%06d seconds from start", wp->config->name, (int) pid, buf, (long)tv2.tv_sec, (int) tv2.tv_usec);
+				zlog(severity | log_flags, "[pool %s] child %d exited %s after %ld.%06d seconds from start", wp->config->name, (int) pid, buf, (long)tv2.tv_sec, (int) tv2.tv_usec);
 			} else {
 				zlog(ZLOG_DEBUG, "[pool %s] child %d has been killed by the process management after %ld.%06d seconds from start", wp->config->name, (int) pid, (long)tv2.tv_sec, (int) tv2.tv_usec);
 			}
@@ -326,7 +331,7 @@ void fpm_children_bury(void)
 
 				if (restart_condition) {
 
-					zlog(ZLOG_WARNING, "failed processes threshold (%d in %d sec) is reached, initiating reload", fpm_global_config.emergency_restart_threshold, fpm_global_config.emergency_restart_interval);
+					zlog(ZLOG_WARNING | log_flags, "failed processes threshold (%d in %d sec) is reached, initiating reload", fpm_global_config.emergency_restart_threshold, fpm_global_config.emergency_restart_interval);
 
 					fpm_pctl(FPM_PCTL_STATE_RELOADING, FPM_PCTL_ACTION_SET);
 				}
@@ -342,7 +347,7 @@ void fpm_children_bury(void)
 		} else if (fpm_globals.parent_pid == 1) {
 			zlog(ZLOG_DEBUG, "unknown child (%d) exited %s - most likely an orphan process (master process is the init process)", pid, buf);
 		} else {
-			zlog(ZLOG_WARNING, "unknown child (%d) exited %s - potentially a bug or pre exec child (e.g. s6-notifyoncheck)", pid, buf);
+			zlog(ZLOG_WARNING | log_flags, "unknown child (%d) exited %s - potentially a bug or pre exec child (e.g. s6-notifyoncheck)", pid, buf);
 		}
 	}
 }
