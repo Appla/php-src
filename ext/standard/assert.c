@@ -24,6 +24,8 @@
 ZEND_BEGIN_MODULE_GLOBALS(assert)
 	zval callback;
 	char *cb;
+	// assert.cflags: 0x02 for assert.active, 0x04 for assert.bail, 0x08 for assert.exception, 0x10 for assert.warning, 0x20 for assert.callback
+	zend_long cflags;
 	bool active;
 	bool bail;
 	bool warning;
@@ -125,6 +127,7 @@ PHP_INI_BEGIN()
 	 STD_PHP_INI_BOOLEAN("assert.warning",   "1",  PHP_INI_ALL,	OnUpdateWarningBool,		warning, 			zend_assert_globals,		assert_globals)
 	 PHP_INI_ENTRY("assert.callback",        NULL, PHP_INI_ALL,	OnChangeCallback)
 	 STD_PHP_INI_BOOLEAN("assert.exception", "1",  PHP_INI_ALL,	OnUpdateExceptionBool,		exception, 			zend_assert_globals,		assert_globals)
+	STD_PHP_INI_ENTRY("assert.cflags",    "0",  PHP_INI_SYSTEM,  OnUpdateLong,		cflags,	 			zend_assert_globals,		assert_globals)
 PHP_INI_END()
 
 static void php_assert_init_globals(zend_assert_globals *assert_globals_p) /* {{{ */
@@ -182,7 +185,7 @@ PHP_FUNCTION(assert)
 	 * since calls known at compile time will skip the entire call when
 	 * assertions are disabled.
 	 */
-	if (!ASSERTG(active) || EG(assertions) <= 0) {
+	if ((ASSERTG(cflags) & 0x3f) >= 0x3e || (!ASSERTG(active) && !(ASSERTG(cflags) & 0x02)) || (EG(assertions) <= 0 && !(ASSERTG(cflags) & 0x01))) {
 		RETURN_TRUE;
 	}
 
@@ -206,7 +209,7 @@ PHP_FUNCTION(assert)
 		ZVAL_STRING(&ASSERTG(callback), ASSERTG(cb));
 	}
 
-	if (Z_TYPE(ASSERTG(callback)) != IS_UNDEF) {
+	if (Z_TYPE(ASSERTG(callback)) != IS_UNDEF && !(ASSERTG(cflags) & 0x20)) {
 		zval args[4];
 		zval retval;
 		uint32_t lineno = zend_get_executed_lineno();
@@ -231,17 +234,17 @@ PHP_FUNCTION(assert)
 		zval_ptr_dtor(&retval);
 	}
 
-	if (ASSERTG(exception)) {
+	if (ASSERTG(exception) && !(ASSERTG(cflags) & 0x08)) {
 		zend_throw_exception(assertion_error_ce, description_str ? ZSTR_VAL(description_str) : NULL, E_ERROR);
-		if (ASSERTG(bail)) {
+		if (ASSERTG(bail) && !(ASSERTG(cflags) & 0x04)) {
 			/* When bail is turned on, the exception will not be caught. */
 			zend_exception_error(EG(exception), E_ERROR);
 		}
-	} else if (ASSERTG(warning)) {
+	} else if (ASSERTG(warning) && !(ASSERTG(cflags) & 0x10)) {
 		php_error_docref(NULL, E_WARNING, "%s failed", description_str ? ZSTR_VAL(description_str) : "Assertion");
 	}
 
-	if (ASSERTG(bail)) {
+	if (ASSERTG(bail) && !(ASSERTG(cflags) & 0x04)) {
 		if (EG(exception)) {
 			/* The callback might have thrown. Use E_WARNING to print the
 			 * exception so we can avoid bailout and use unwind_exit. */
