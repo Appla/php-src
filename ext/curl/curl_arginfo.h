@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: d524d2fd58e484682c860d8a72eafc9a7d544911 */
+ * Stub hash: 1435f6ef4ff5bf884017d3db34a7720267d1f88a */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_curl_close, 0, 1, IS_VOID, 0)
 	ZEND_ARG_OBJ_INFO(0, handle, CurlHandle, 0)
@@ -1023,6 +1023,9 @@ static void register_curl_symbols(int module_number)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073d00 /* Available since 7.61.0 */
 	REGISTER_LONG_CONSTANT("CURLAUTH_BEARER", CURLAUTH_BEARER, CONST_PERSISTENT);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x073d00 /* Available since 7.61.0 */ && LIBCURL_VERSION_NUM >= 0x080600 /* Available since 8.6.0 */
+	REGISTER_LONG_CONSTANT("CURLINFO_QUEUE_TIME_T", CURLINFO_QUEUE_TIME_T, CONST_PERSISTENT);
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073d00 /* Available since 7.61.0 */
 	REGISTER_LONG_CONSTANT("CURLINFO_APPCONNECT_TIME_T", CURLINFO_APPCONNECT_TIME_T, CONST_PERSISTENT);
