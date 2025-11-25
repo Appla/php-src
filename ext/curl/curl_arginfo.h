@@ -1,5 +1,5 @@
 /* This is a generated file, edit the .stub.php file instead.
- * Stub hash: 1435f6ef4ff5bf884017d3db34a7720267d1f88a */
+ * Stub hash: 999d4bc9c105b1ca0971ad2d3bf1d89e2244f4d3 */
 
 ZEND_BEGIN_ARG_WITH_RETURN_TYPE_INFO_EX(arginfo_curl_close, 0, 1, IS_VOID, 0)
 	ZEND_ARG_OBJ_INFO(0, handle, CurlHandle, 0)
@@ -1047,6 +1047,9 @@ static void register_curl_symbols(int module_number)
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073d00 /* Available since 7.61.0 */
 	REGISTER_LONG_CONSTANT("CURLINFO_TOTAL_TIME_T", CURLINFO_TOTAL_TIME_T, CONST_PERSISTENT);
+#endif
+#if LIBCURL_VERSION_NUM >= 0x073d00 /* Available since 7.61.0 */ && LIBCURL_VERSION_NUM >= 0x080200 /* Available since 8.2.0 */
+	REGISTER_LONG_CONSTANT("CURLINFO_CONN_ID", CURLINFO_CONN_ID, CONST_PERSISTENT);
 #endif
 #if LIBCURL_VERSION_NUM >= 0x073d00 /* Available since 7.61.0 */
 	REGISTER_LONG_CONSTANT("CURLOPT_DISALLOW_USERNAME_IN_URL", CURLOPT_DISALLOW_USERNAME_IN_URL, CONST_PERSISTENT);

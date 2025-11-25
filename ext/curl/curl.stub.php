@@ -3071,6 +3071,13 @@ const CURLINFO_STARTTRANSFER_TIME_T = UNKNOWN;
  * @cvalue CURLINFO_TOTAL_TIME_T
  */
 const CURLINFO_TOTAL_TIME_T = UNKNOWN;
+#if LIBCURL_VERSION_NUM >= 0x080200 /* Available since 8.2.0 */
+/**
+ * @var int
+ * @cvalue CURLINFO_CONN_ID
+ */
+const CURLINFO_CONN_ID = UNKNOWN;
+#endif
 /**
  * @var int
  * @cvalue CURLOPT_DISALLOW_USERNAME_IN_URL
