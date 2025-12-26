@@ -154,6 +154,7 @@ typedef struct _php_cgi_globals_struct {
 	HashTable user_config_cache;
 	char *error_header;
 	char *fpm_config;
+	zend_long fcgi_cflags;
 } php_cgi_globals_struct;
 
 /* {{{ user_config_cache
@@ -1379,6 +1380,7 @@ static fcgi_request *fpm_init_request(int listen_fd) /* {{{ */ {
 		fpm_request_accepting,
 		fpm_request_reading_headers,
 		fpm_request_finished);
+		fcgi_set_cflags(req, (int)(CGIG(fcgi_cflags) & 0xFFFF));
 	return req;
 }
 /* }}} */
@@ -1430,6 +1432,7 @@ PHP_INI_BEGIN()
 	STD_PHP_INI_BOOLEAN("cgi.fix_pathinfo",        "1",  PHP_INI_SYSTEM, OnUpdateBool,   fix_pathinfo, php_cgi_globals_struct, php_cgi_globals)
 	STD_PHP_INI_BOOLEAN("cgi.discard_path",        "0",  PHP_INI_SYSTEM, OnUpdateBool,   discard_path, php_cgi_globals_struct, php_cgi_globals)
 	STD_PHP_INI_BOOLEAN("fastcgi.logging",         "1",  PHP_INI_SYSTEM, OnUpdateBool,   fcgi_logging, php_cgi_globals_struct, php_cgi_globals)
+	STD_PHP_INI_ENTRY("fastcgi.cflags",         "0",  PHP_INI_SYSTEM, OnUpdateLongGEZero,   fcgi_cflags, php_cgi_globals_struct, php_cgi_globals)
 	STD_PHP_INI_ENTRY("fastcgi.error_header",    NULL, PHP_INI_SYSTEM, OnUpdateString, error_header, php_cgi_globals_struct, php_cgi_globals)
 	STD_PHP_INI_ENTRY("fpm.config",    NULL, PHP_INI_SYSTEM, OnUpdateString, fpm_config, php_cgi_globals_struct, php_cgi_globals)
 PHP_INI_END()
@@ -1448,6 +1451,7 @@ static void php_cgi_globals_ctor(php_cgi_globals_struct *php_cgi_globals)
 	zend_hash_init(&php_cgi_globals->user_config_cache, 0, NULL, user_config_cache_entry_dtor, 1);
 	php_cgi_globals->error_header = NULL;
 	php_cgi_globals->fpm_config = NULL;
+	php_cgi_globals->fcgi_cflags = 0;
 }
 /* }}} */
 

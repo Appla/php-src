@@ -227,6 +227,7 @@ struct _fcgi_request {
 	fcgi_req_hook  hook;
 
 	int            has_env;
+	int            cflags;    // here is a gap, so reuse put cflags in here.
 	fcgi_hash      env;
 };
 
@@ -874,6 +875,16 @@ static void fcgi_hook_dummy(void) {
 	return;
 }
 
+void fcgi_set_cflags(fcgi_request *req, int cflags)
+{
+	req->cflags = cflags;
+}
+
+int fcgi_get_cflags(fcgi_request *req)
+{
+	return req->cflags;
+}
+
 fcgi_request *fcgi_init_request(int listen_socket, void(*on_accept)(void), void(*on_read)(void), void(*on_close)(void))
 {
 	fcgi_request *req = calloc(1, sizeof(fcgi_request));
@@ -1045,6 +1056,7 @@ static int fcgi_read_request(fcgi_request *req)
 	fcgi_header hdr;
 	int len, padding;
 	unsigned char buf[FCGI_MAX_LENGTH+8];
+	bool call_on_read = req->keep && (req->cflags & FCGI_FLAG_DELAY_ON_READ);
 
 	req->keep = 0;
 	req->ended = 0;
@@ -1078,6 +1090,12 @@ static int fcgi_read_request(fcgi_request *req)
 
 	if (len + padding > FCGI_MAX_LENGTH) {
 		return 0;
+	}
+	// for our cases, this connection is fast enough, so we can ignore read header time
+	// because the last empty FCGI_STDIN is always empty AND kept in buffer,
+	//     so we need to call on_read after a really read request
+	if (call_on_read) {
+		req->hook.on_read();
 	}
 
 	req->id = (hdr.requestIdB1 << 8) + hdr.requestIdB0;
@@ -1363,9 +1381,13 @@ int fcgi_accept_request(fcgi_request *req)
 	HANDLE pipe;
 	OVERLAPPED ov;
 #endif
+	bool call_on_read = !(req->cflags & FCGI_FLAG_DELAY_ON_READ);
 
 	while (1) {
 		if (req->fd < 0) {
+			// incase something happen, we need to reset keep flag.
+			req->keep = 0;
+			call_on_read = true;
 			while (1) {
 				if (in_shutdown) {
 					return -1;
@@ -1479,7 +1501,9 @@ int fcgi_accept_request(fcgi_request *req)
 		} else if (in_shutdown) {
 			return -1;
 		}
-		req->hook.on_read();
+		if (call_on_read) {
+			req->hook.on_read();
+		}
 		int read_result = fcgi_read_request(req);
 		if (read_result == 1) {
 #ifdef _WIN32

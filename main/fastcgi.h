@@ -81,6 +81,9 @@ typedef void (*fcgi_apply_func)(const char *var, unsigned int var_len, char *val
 #define FCGI_HASH_TABLE_MASK (FCGI_HASH_TABLE_SIZE - 1)
 #define FCGI_HASH_SEG_SIZE   4096
 
+// delay call on read after reading header for keepalive connection
+#define FCGI_FLAG_DELAY_ON_READ 0x02
+
 typedef struct _fcgi_request fcgi_request;
 
 int fcgi_init(void);
@@ -92,6 +95,8 @@ int fcgi_in_shutdown(void);
 void fcgi_terminate(void);
 int fcgi_listen(const char *path, int backlog);
 fcgi_request* fcgi_init_request(int listen_socket, void(*on_accept)(void), void(*on_read)(void), void(*on_close)(void));
+void fcgi_set_cflags(fcgi_request *req, int cflags);
+int fcgi_get_cflags(fcgi_request *req);
 void fcgi_destroy_request(fcgi_request *req);
 void fcgi_set_allowed_clients(char *ip);
 int fcgi_accept_request(fcgi_request *req);
