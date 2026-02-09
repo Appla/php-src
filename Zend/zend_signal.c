@@ -120,9 +120,8 @@ void zend_signal_handler_defer(int signo, siginfo_t *siginfo, void *context)
 				SIGG(running) = 0;
 			}
 		} else { /* delay signal handling */
-			SIGG(blocked) = 1; /* signal is blocked */
-
 			if ((queue = SIGG(pavail))) { /* if none available it's simply forgotten */
+				SIGG(blocked) = 1; /* signal is blocked */
 				SIGG(pavail) = queue->next;
 				queue->zend_signal.signo = signo;
 				queue->zend_signal.siginfo = siginfo;
@@ -160,13 +159,15 @@ ZEND_API void zend_signal_handler_unblock(void)
 	if (EXPECTED(SIGG(active))) {
 		SIGNAL_BEGIN_CRITICAL(); /* procmask to protect handler_defer as if it were called by the kernel */
 		queue = SIGG(phead);
-		SIGG(phead) = queue->next;
-		zend_signal = queue->zend_signal;
-		queue->next = SIGG(pavail);
-		queue->zend_signal.signo = 0;
-		SIGG(pavail) = queue;
+		if (EXPECTED(queue)) {
+			SIGG(phead) = queue->next;
+			zend_signal = queue->zend_signal;
+			queue->next = SIGG(pavail);
+			queue->zend_signal.signo = 0;
+			SIGG(pavail) = queue;
 
-		zend_signal_handler_defer(zend_signal.signo, zend_signal.siginfo, zend_signal.context);
+			zend_signal_handler_defer(zend_signal.signo, zend_signal.siginfo, zend_signal.context);
+		}
 		SIGNAL_END_CRITICAL();
 	}
 }
