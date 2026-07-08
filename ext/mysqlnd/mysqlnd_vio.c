@@ -603,7 +603,13 @@ MYSQLND_METHOD(mysqlnd_vio, enable_ssl)(MYSQLND_VIO * const net)
 	*/
 	php_stream_context_set(net_stream, NULL);
 
-	if (net->data->options.timeout_read) {
+	/*
+	  the read timeout set in post_connect_set_opt survives the crypto switch;
+	  this re-set is defensive
+	*/
+	if (net->data->options.timeout_read &&
+			(!net->data->options.timeout_connect ||
+			 net->data->options.timeout_connect == net->data->options.timeout_read)) {
 		struct timeval tv;
 		DBG_INF_FMT("setting %u as PHP_STREAM_OPTION_READ_TIMEOUT", net->data->options.timeout_read);
 		tv.tv_sec = net->data->options.timeout_read;

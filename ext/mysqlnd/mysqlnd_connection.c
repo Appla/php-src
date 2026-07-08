@@ -28,6 +28,7 @@
 #include "mysqlnd_charset.h"
 #include "mysqlnd_debug.h"
 #include "mysqlnd_ext_plugin.h"
+#include "php_network.h"
 #include "zend_smart_str.h"
 
 
@@ -506,8 +507,40 @@ MYSQLND_METHOD(mysqlnd_conn_data, connect_handshake)(MYSQLND_CONN_DATA * conn,
 	if (PASS == conn->vio->data->m.connect(conn->vio, *scheme, conn->persistent, conn->stats, conn->error_info)) {
 		conn->protocol_frame_codec->data->m.reset(conn->protocol_frame_codec, conn->stats, conn->error_info);
 		size_t client_flags = mysql_flags;
+		bool restore_timeout = false;
+		struct timeval saved_tv = {0};
+		php_stream *net_stream = NULL;
 
+		/* if equal, post_connect_set_opt already put this value on the stream */
+		if (conn->vio->data->options.timeout_connect && conn->vio->data->options.timeout_connect != conn->vio->data->options.timeout_read) {
+			net_stream = conn->vio->data->m.get_stream(conn->vio);
+			if (net_stream) {
+#ifndef PHP_WIN32
+				/* non-Windows get_scheme() only emits tcp:// or unix://, both created via php_stream_xport_create, so abstract is php_netstream_data_t */
+				ZEND_ASSERT((scheme->l > sizeof("tcp://") - 1 && !memcmp(scheme->s, "tcp://", sizeof("tcp://") - 1)) || (scheme->l > sizeof("unix://") - 1 && !memcmp(scheme->s, "unix://", sizeof("unix://") - 1)));
+#else
+				if ((scheme->l > sizeof("tcp://") - 1 && !memcmp(scheme->s, "tcp://", sizeof("tcp://") - 1))
+					|| (scheme->l > sizeof("unix://") - 1 && !memcmp(scheme->s, "unix://", sizeof("unix://") - 1)))
+#endif
+				{
+					/* TODO: Avoid relying on php_netstream_data_t internals here. */
+					saved_tv = ((php_netstream_data_t *)net_stream->abstract)->timeout;
+
+					struct timeval tv;
+					restore_timeout = true;
+					tv.tv_sec = conn->vio->data->options.timeout_connect;
+					tv.tv_usec = 0;
+					DBG_INF_FMT("setting %u as PHP_STREAM_OPTION_READ_TIMEOUT for handshake",
+								conn->vio->data->options.timeout_connect);
+					php_stream_set_option(net_stream, PHP_STREAM_OPTION_READ_TIMEOUT, 0, &tv);
+				}
+			}
+		}
 		ret = conn->command->handshake(conn, *username, *password, *database, client_flags);
+		if (restore_timeout) {
+			DBG_INF_FMT("restore " ZEND_LONG_FMT " as PHP_STREAM_OPTION_READ_TIMEOUT for read", (zend_long)saved_tv.tv_sec);
+			php_stream_set_option(net_stream, PHP_STREAM_OPTION_READ_TIMEOUT, 0, &saved_tv);
+		}
 	}
 	DBG_RETURN(ret);
 }
@@ -2115,8 +2148,6 @@ MYSQLND_CLASS_METHODS_START(mysqlnd_conn)
 	MYSQLND_METHOD(mysqlnd_conn, close)
 MYSQLND_CLASS_METHODS_END;
 
-
-#include "php_network.h"
 
 /* {{{ mysqlnd_stream_array_to_fd_set */
 MYSQLND **
