@@ -17,11 +17,13 @@ static void fpm_systemd(void)
 	struct fpm_worker_pool_s *wp;
 	unsigned long int requests=0, slow_req=0;
 	int active=0, idle=0;
+	int reused=0;
 
 
 	for (wp = fpm_worker_all_pools; wp; wp = wp->next) {
 		if (wp->scoreboard) {
 			active   += wp->scoreboard->active;
+			reused   += wp->scoreboard->reused;
 			idle     += wp->scoreboard->idle;
 			requests += wp->scoreboard->requests;
 			slow_req += wp->scoreboard->slow_rq;
@@ -35,9 +37,9 @@ static void fpm_systemd(void)
 */
 
 	if (0 > sd_notifyf(0, "READY=1\n%s"
-				"STATUS=Processes active: %d, idle: %d, Requests: %lu, slow: %lu, Traffic: %.2freq/sec",
+				"STATUS=Processes active: %d, reused: %d idle: %d, Requests: %lu, slow: %lu, Traffic: %.2freq/sec",
 				fpm_global_config.systemd_watchdog ? "WATCHDOG=1\n" : "",
-				active, idle, requests, slow_req, ((float)requests - last) * 1000.0 / fpm_global_config.systemd_interval)) {
+				active, reused, idle, requests, slow_req, ((float)requests - last) * 1000.0 / fpm_global_config.systemd_interval)) {
 		zlog(ZLOG_NOTICE, "failed to notify status to systemd");
 	}
 
